@@ -198,6 +198,26 @@ neutron_services:
         port: "{{ neutron_server_port }}"
         listen_port: "{{ neutron_server_listen_port }}"
         tls_backend: "yes"
+  calico-dhcp-agent:
+    container_name: calico_dhcp_agent
+    group: calico-dhcp-agent
+    host_in_groups: "{{ inventory_hostname in groups['calico-dhcp-agent'] }}"
+    enabled: "{{ enable_neutron_calico | bool }}"
+    image: "{{ calico_dhcp_agent_image_full }}"
+    volumes: "{{ calico_dhcp_agent_default_volumes + calico_dhcp_agent_extra_volumes }}"
+    dimensions: "{{ calico_dhcp_agent_dimensions }}"
+    healthcheck: "{{ calico_dhcp_agent_healthcheck }}"
+    privileged: True
+  calico-felix-agent:
+    container_name: calico_felix_agent
+    group: calico-felix-agent
+    host_in_groups: "{{ inventory_hostname in groups['calico-felix-agent'] }}"
+    enabled: "{{ enable_neutron_calico | bool }}"
+    image: "{{ calico_felix_agent_image_full }}"
+    volumes: "{{ calico_felix_agent_default_volumes + calico_felix_agent_extra_volumes }}"
+    dimensions: "{{ calico_felix_agent_dimensions }}"
+    healthcheck: "{{ calico_felix_agent_healthcheck }}"
+    privileged: True
 
 ####################
 # Database
@@ -274,6 +294,14 @@ neutron_tls_proxy_image: "{{ docker_registry ~ '/' if docker_registry else '' }}
 neutron_tls_proxy_tag: "{{ haproxy_tag }}"
 neutron_tls_proxy_image_full: "{{ neutron_tls_proxy_image }}:{{ neutron_tls_proxy_tag }}"
 
+calico_dhcp_agent_image: "{{ docker_registry ~ '/' if docker_registry else '' }}{{ docker_namespace }}/{{ kolla_base_distro }}-{{ neutron_install_type }}-calico-dhcp-agent"
+calico_dhcp_agent_tag: "{{ neutron_tag }}"
+calico_dhcp_agent_image_full: "{{ calico_dhcp_agent_image }}:{{ calico_dhcp_agent_tag }}"
+
+calico_felix_agent_image: "{{ docker_registry ~ '/' if docker_registry else '' }}{{ docker_namespace }}/{{ kolla_base_distro }}-{{ neutron_install_type }}-calico-felix-agent"
+calico_felix_agent_tag: "{{ neutron_tag }}"
+calico_felix_agent_image_full: "{{ calico_felix_agent_image }}:{{ calico_felix_agent_tag }}"
+
 neutron_agent_dimensions: "{{ default_container_dimensions }}"
 
 neutron_dhcp_agent_dimensions: "{{ neutron_agent_dimensions }}"
@@ -291,6 +319,8 @@ neutron_infoblox_ipam_agent_dimensions: "{{ default_container_dimensions }}"
 neutron_metering_agent_dimensions: "{{ neutron_agent_dimensions }}"
 ironic_neutron_agent_dimensions: "{{ default_container_dimensions }}"
 neutron_tls_proxy_dimensions: "{{ default_container_dimensions }}"
+calico_dhcp_agent_dimensions: "{{ default_container_dimensions }}"
+calico_felix_agent_dimensions: "{{ default_container_dimensions }}"
 
 neutron_dhcp_agent_enable_healthchecks: "{{ enable_container_healthchecks }}"
 neutron_dhcp_agent_healthcheck_interval: "{{ default_container_healthcheck_interval }}"
@@ -435,6 +465,33 @@ ironic_neutron_agent_healthcheck:
   test: "{% if ironic_neutron_agent_enable_healthchecks | bool %}{{ ironic_neutron_agent_healthcheck_test }}{% else %}NONE{% endif %}"
   timeout: "{{ ironic_neutron_agent_healthcheck_timeout }}"
 
+calico_dhcp_agent_enable_healthchecks: "{{ enable_container_healthchecks }}"
+calico_dhcp_agent_healthcheck_interval: "{{ default_container_healthcheck_interval }}"
+calico_dhcp_agent_healthcheck_retries: "{{ default_container_healthcheck_retries }}"
+calico_dhcp_agent_healthcheck_start_period: "{{ default_container_healthcheck_start_period }}"
+calico_dhcp_agent_healthcheck_test: ["CMD-SHELL", "healthcheck_port calico-dhcp-agent {{ om_rpc_port }}"]
+calico_dhcp_agent_healthcheck_timeout: "{{ default_container_healthcheck_timeout }}"
+calico_dhcp_agent_healthcheck:
+  interval: "{{ calico_dhcp_agent_healthcheck_interval }}"
+  retries: "{{ calico_dhcp_agent_healthcheck_retries }}"
+  start_period: "{{ calico_dhcp_agent_healthcheck_start_period }}"
+  test: "{% if calico_dhcp_agent_enable_healthchecks | bool %}{{ calico_dhcp_agent_healthcheck_test }}{% else %}NONE{% endif %}"
+  timeout: "{{ calico_dhcp_agent_healthcheck_timeout }}"
+
+calico_felix_agent_enable_healthchecks: "{{ enable_container_healthchecks }}"
+calico_felix_agent_healthcheck_interval: "{{ default_container_healthcheck_interval }}"
+calico_felix_agent_healthcheck_retries: "{{ default_container_healthcheck_retries }}"
+calico_felix_agent_healthcheck_start_period: "{{ default_container_healthcheck_start_period }}"
+calico_felix_agent_healthcheck_test: ["CMD-SHELL", "healthcheck_port calico-felix-agent {{ om_rpc_port }}"]
+calico_felix_agent_healthcheck_timeout: "{{ default_container_healthcheck_timeout }}"
+calico_felix_agent_healthcheck:
+  interval: "{{ calico_felix_agent_healthcheck_interval }}"
+  retries: "{{ calico_felix_agent_healthcheck_retries }}"
+  start_period: "{{ calico_felix_agent_healthcheck_start_period }}"
+  test: "{% if calico_felix_agent_enable_healthchecks | bool %}{{ calico_felix_agent_healthcheck_test }}{% else %}NONE{% endif %}"
+  timeout: "{{ calico_felix_agent_healthcheck_timeout }}"
+
+
 neutron_dhcp_agent_default_volumes:
   - "{{ node_config_directory }}/neutron-dhcp-agent/:{{ container_config_directory }}/:ro"
   - "/etc/localtime:/etc/localtime:ro"
@@ -533,6 +590,20 @@ neutron_tls_proxy_default_volumes:
   - "/etc/localtime:/etc/localtime:ro"
   - "{{ '/etc/timezone:/etc/timezone:ro' if ansible_facts.os_family == 'Debian' else '' }}"
   - "kolla_logs:/var/log/kolla/"
+calico_dhcp_agent_default_volumes:
+  - "{{ node_config_directory }}/calico-dhcp-agent/:{{ container_config_directory }}/:ro"
+  - "/etc/localtime:/etc/localtime:ro"
+  - "{{ '/etc/timezone:/etc/timezone:ro' if ansible_facts.os_family == 'Debian' else '' }}"
+  - "neutron_metadata_socket:/var/lib/neutron/kolla/"
+  - "/run/netns:/run/netns:shared"
+  - "kolla_logs:/var/log/kolla/"
+  - "{{ kolla_dev_repos_directory ~ '/neutron/neutron:/var/lib/kolla/venv/lib/python' ~ distro_python_version ~ '/site-packages/neutron' if neutron_dev_mode | bool else '' }}"
+calico_felix_agent_default_volumes:
+  - "{{ node_config_directory }}/calico-felix-agent/:{{ container_config_directory }}/:ro"
+  - "/etc/localtime:/etc/localtime:ro"
+  - "{{ '/etc/timezone:/etc/timezone:ro' if ansible_facts.os_family == 'Debian' else '' }}"
+  - "/run/netns:/run/netns:shared"
+  - "kolla_logs:/var/log/kolla/"
 
 neutron_extra_volumes: "{{ default_extra_volumes }}"
 neutron_dhcp_agent_extra_volumes: "{{ neutron_extra_volumes }}"
@@ -550,6 +621,8 @@ neutron_infoblox_ipam_agent_extra_volumes: "{{ neutron_extra_volumes }}"
 neutron_metering_agent_extra_volumes: "{{ neutron_extra_volumes }}"
 ironic_neutron_agent_extra_volumes: "{{ neutron_extra_volumes }}"
 neutron_tls_proxy_extra_volumes: "{{ neutron_extra_volumes }}"
+calico_dhcp_agent_extra_volumes: "{{ neutron_extra_volumes }}"
+calico_felix_agent_extra_volumes: "{{ neutron_extra_volumes }}"
 
 ####################
 # OpenStack
